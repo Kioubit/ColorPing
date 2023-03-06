@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>IPV6Canvas</title>
+    <style>
+        body{
+            background-color: lightslategrey;
+        }
+        #display{
+            margin-right: auto;
+            margin-left: auto;
+            margin-top: 1em;
+            display: block;
+            border: black 2px;
+        }
+        #collapsed-information{
+            display: none;
+            position: absolute;
+            left: 0;
+            right: 0;
+            margin-left: auto;
+            margin-right: auto;
+            width: 10em;
+            top: 0;
+            opacity: 84%;
+            color: white;
+            background-color: rgb(100, 100, 200);
+        }
+        #information{
+            position: absolute;
+            left: 0;
+            right: 0;
+            margin-left: auto;
+            margin-right: auto;
+            width: 30em;
+            top: 1em;
+            opacity: 80%;
+            padding-left: 0.6em;
+            padding-right: 0.6em;
+            padding-bottom: 0.6em;
+            color: white;
+            background-color: rgb(100, 100, 200);
+        }
+        .dot {
+            height: 25px;
+            width: 25px;
+            background-color: #ff8200;
+            border-radius: 50%;
+            display: inline-block;
+            vertical-align: middle;
+        }
+        .center {
+            align-items: center;
+            display: flex;
+            justify-content: center;
+        }
+    </style>
+</head>
+<body>
+<div>
+    <div id="collapsed-information">
+        <div class="center"><a style="text-decoration: underline" onclick="infoHandler(true)">Show information</a></div>
+    </div>
+    <div id="information">
+        <h2>IPv6 Canvas</h2>
+        <b>ping {{.BaseIP}}XXXX:YYYY:11RR:GGBB</b>
+        <br>Substitute coordinates and color, then ping. Values are hexadecimal.<br>
+        <br>Canvas size: {{.CanvasWidth}}x{{.CanvasHeight}}<br>
+        Connection status: <span id="connectionStatus" class="dot"></span>
+        <span style="float: right"><a style="text-decoration: underline" onclick="infoHandler(false)">Collapse</a></span>
+        <br>
+    </div>
+    <canvas id="display" width="1024" height="1024"></canvas>
+</div>
+</body>
+<script>
+    const canvas = document.getElementById("display");
+    const ctx = canvas.getContext("2d")
+    const evtSource = new EventSource("/stream");
+    ctx.imageSmoothingEnabled = false;
+    ctx.mozImageSmoothingEnabled = false;
+    ctx.webkitImageSmoothingEnabled = false;
+
+    //ctx.scale(1.9, 1.9)
+    ctx.fillStyle = "#000000";
+    ctx.font = "30px Arial";
+    ctx.fillText("Please wait...", 0, 200,170);
+    evtSource.addEventListener("u", (event) => {
+        let img = new Image();
+        img.src = "data:image/png;base64," + event.data;
+        img.onload = function () {
+            ctx.drawImage(img, 0, 0, 1024, 1024);
+        };
+        img.onerror = function (error) {
+            console.log("Img Onerror:", error);
+        };
+    });
+    evtSource.onerror = (err) => {
+        console.log(err)
+        document.getElementById("connectionStatus").style.setProperty("background-color","#d20000")
+    };
+    evtSource.onopen = () => {
+        document.getElementById("connectionStatus").style.setProperty("background-color","#00a30e")
+    };
+    function infoHandler(expand) {
+        if (expand) {
+            document.getElementById("collapsed-information").style.display = "none";
+            document.getElementById("information").style.display = "block";
+        } else {
+            document.getElementById("collapsed-information").style.display = "block";
+            document.getElementById("information").style.display = "none";
+        }
+    }
+</script>
+</html>
