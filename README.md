@@ -8,7 +8,9 @@ to all viewers via a webpage.
 
 ## Setup
 Run and assign a /64 IPv6 subnet to the created interface named `canvas`.
-The program needs to run as root or with the `CAP_NET_ADMIN` capability
+The program needs to run as root or with the `CAP_NET_ADMIN` capability.
+
+Access the webpage where the canvas is displayed at: http://localhost:9090/
 
 ### Example
 ```
