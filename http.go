@@ -174,10 +174,9 @@ func streamServer() {
 					}
 				}
 			}
-			time.Sleep(400 * time.Millisecond)
 		}
 		clientMutex.RUnlock()
-		time.Sleep(10 * time.Millisecond)
+		time.Sleep(500 * time.Millisecond)
 	}
 }
 
