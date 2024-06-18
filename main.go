@@ -25,7 +25,7 @@ func main() {
 	go startInterface(packetChan)
 	go streamServer()
 	fmt.Println("Kioubit ColorPing started")
-	fmt.Println("Interface name:", interfaceName)
+	fmt.Println("Interface name:", interfaceName, "HTTP server port: 9090")
 	httpServer()
 }
 
@@ -41,6 +41,10 @@ func prePopulatePixelArray() {
 	}
 }
 
+var pktPool = sync.Pool{
+	New: func() interface{} { return make([]byte, 2000) },
+}
+
 func startInterface(packetChan chan *[]byte) {
 	config := water.Config{
 		DeviceType: water.TUN,
@@ -52,7 +56,7 @@ func startInterface(packetChan chan *[]byte) {
 	}
 
 	for {
-		packet := make([]byte, 2000)
+		packet := pktPool.Get().([]byte)
 		n, err := iFace.Read(packet)
 		if err != nil {
 			log.Fatal(err)
@@ -99,7 +103,7 @@ func packetHandler(packetChan chan *[]byte) {
 			obj.changed = true
 		}
 		obj.Unlock()
-
+		pktPool.Put(*packet)
 	}
 
 }

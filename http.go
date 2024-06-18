@@ -50,6 +50,9 @@ func getClientID() uint32 {
 func clearClients() {
 	clientMutex.Lock()
 	defer clientMutex.Unlock()
+	for _, c := range clients {
+		close(c.channel)
+	}
 	clients = make(map[uint32]*client)
 }
 
@@ -59,7 +62,7 @@ func httpServer() {
 	htmlTemplate = template.Must(template.ParseFS(embedFS, "template.html"))
 	http.HandleFunc("/stream", stream)
 	http.HandleFunc("/", serveRoot)
-	err = http.ListenAndServe("0.0.0.0:9090", nil)
+	err = http.ListenAndServe(":9090", nil)
 	if err != nil {
 		log.Fatalln(err)
 	}
@@ -157,7 +160,7 @@ func streamServer() {
 
 		dataInitial, dataUpdate := getPicture(requiresInitial, requiresUpdate)
 
-		for _, v := range clients {
+		for clientID, v := range clients {
 			if v.state == INITIAL {
 				v.state = ACTIVE
 				select {
@@ -170,6 +173,9 @@ func streamServer() {
 					select {
 					case v.channel <- dataUpdate:
 					default:
+						// Client cannot keep up
+						close(v.channel)
+						delete(clients, clientID)
 						continue
 					}
 				}
@@ -189,7 +195,6 @@ func stream(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
-	w.Header().Set("Access-Control-Allow-Origin", "*")
 	messageChan := make(chan string, 40)
 	id := getClientID()
 	newClient := client{
@@ -199,18 +204,24 @@ func stream(w http.ResponseWriter, r *http.Request) {
 	clientMutex.Lock()
 	clients[id] = &newClient
 	clientMutex.Unlock()
+
+	// For when clients are removed prior to connection closed, to avoid a call to delete(clients, id)
+	var channelClosedFirst = false
 	go func() {
 		// Listen for connection close
 		<-r.Context().Done()
 		clientMutex.Lock()
+		if !channelClosedFirst {
+			delete(clients, id)
+		}
 		close(messageChan)
-		delete(clients, id)
 		clientMutex.Unlock()
 	}()
 
 	for {
-		data := <-messageChan
-		if data == "" {
+		data, ok := <-messageChan
+		if !ok {
+			channelClosedFirst = true
 			return
 		}
 		_, _ = w.Write([]byte(data))
