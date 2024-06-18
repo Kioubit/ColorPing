@@ -2,46 +2,64 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>IPV6Canvas</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>IPV6 Canvas</title>
     <style>
-        body{
+        body {
             background-color: lightslategrey;
         }
-        #display{
+
+        #display {
             margin-right: auto;
             margin-left: auto;
-            margin-top: 1em;
+            margin-top: 2em;
             display: block;
             border: black 2px;
         }
-        #collapsed-information{
-            display: none;
-            position: absolute;
-            left: 0;
-            right: 0;
-            margin-left: auto;
-            margin-right: auto;
-            width: 10em;
-            top: 0;
-            opacity: 84%;
-            color: white;
-            background-color: rgb(100, 100, 200);
+
+        .information {
+            & {
+                position: absolute;
+                left: 0;
+                right: 0;
+                margin-left: auto;
+                margin-right: auto;
+                color: white;
+                background-color: rgb(100, 100, 200);
+                /* Collapsed */
+                max-width: 10em;
+                top: 0;
+                opacity: 84%;
+            }
+
+            & > :first-child {
+                display: none;
+            }
+
+            & > :nth-child(2) {
+                display: block;
+            }
         }
-        #information{
-            position: absolute;
-            left: 0;
-            right: 0;
-            margin-left: auto;
-            margin-right: auto;
-            width: 30em;
-            top: 1em;
-            opacity: 80%;
-            padding-left: 0.6em;
-            padding-right: 0.6em;
-            padding-bottom: 0.6em;
-            color: white;
-            background-color: rgb(100, 100, 200);
+
+        .information.active {
+            & {
+                max-width: 30em;
+                top: 1em;
+                opacity: 80%;
+                padding-left: 0.6em;
+                padding-right: 0.6em;
+                padding-bottom: 0.6em;
+            }
+
+            & > :first-child {
+                display: block;
+            }
+
+            & > :nth-child(2) {
+                display: none;
+            }
         }
+
         .dot {
             height: 25px;
             width: 25px;
@@ -50,42 +68,67 @@
             display: inline-block;
             vertical-align: middle;
         }
-        .center {
-            align-items: center;
-            display: flex;
-            justify-content: center;
+
+        .text-center {
+            text-align: center;
+        }
+
+        .text-underline {
+            text-decoration: underline;
         }
     </style>
 </head>
 <body>
 <div>
-    <div id="collapsed-information">
-        <div class="center"><a style="text-decoration: underline" onclick="infoHandler(true)">Show information</a></div>
+    <div class="information active" id="information">
+        <div>
+            <h2>IPv6 Canvas</h2>
+            <div style="overflow-x: auto">
+                <b>ping {{.BaseIP}}XXXX:YYYY:11RR:GGBB</b>
+                <br>Substitute coordinates and color, then ping. Values are hexadecimal.
+            </div>
+            <br>Canvas size: {{.CanvasWidth}}x{{.CanvasHeight}}<br>
+            Connection status: <span id="connectionStatus" class="dot"></span>
+            <span style="float: right">
+                <a class="text-underline" onclick="infoHandler()">Collapse</a>
+            </span>
+        </div>
+        <div class="text-center">
+            <a class="text-underline" onclick="infoHandler()">Show information</a>
+        </div>
     </div>
-    <div id="information">
-        <h2>IPv6 Canvas</h2>
-        <b>ping {{.BaseIP}}XXXX:YYYY:11RR:GGBB</b>
-        <br>Substitute coordinates and color, then ping. Values are hexadecimal.<br>
-        <br>Canvas size: {{.CanvasWidth}}x{{.CanvasHeight}}<br>
-        Connection status: <span id="connectionStatus" class="dot"></span>
-        <span style="float: right"><a style="text-decoration: underline" onclick="infoHandler(false)">Collapse</a></span>
-        <br>
-    </div>
-    <canvas id="display" width="1024" height="1024"></canvas>
+
+    <canvas id="display"></canvas>
 </div>
 </body>
 <script>
     const canvas = document.getElementById("display");
     const ctx = canvas.getContext("2d")
-    const evtSource = new EventSource("/stream");
     ctx.imageSmoothingEnabled = false;
     ctx.mozImageSmoothingEnabled = false;
     ctx.webkitImageSmoothingEnabled = false;
 
-    //ctx.scale(1.9, 1.9)
+    canvas.width = 1024;
+    canvas.height = 1024;
+
+    async function resizeCanvas() {
+        let desiredSize = document.documentElement.clientWidth - 20;
+        if (desiredSize > 1024) {
+            desiredSize = 1024
+        }
+        canvas.style.width = desiredSize.toString() + "px";
+        canvas.style.height = desiredSize.toString() + "px";
+    }
+
+    window.onresize = resizeCanvas;
+
+    resizeCanvas()
+
     ctx.fillStyle = "#000000";
     ctx.font = "30px Arial";
-    ctx.fillText("Please wait...", 0, 200,170);
+    ctx.fillText("Please wait...", 0, 200, 170);
+
+    const evtSource = new EventSource("/stream");
     evtSource.addEventListener("u", (event) => {
         let img = new Image();
         img.src = "data:image/png;base64," + event.data;
@@ -98,19 +141,15 @@
     });
     evtSource.onerror = (err) => {
         console.log(err)
-        document.getElementById("connectionStatus").style.setProperty("background-color","#d20000")
+        document.getElementById("connectionStatus").style.setProperty("background-color", "#d20000")
     };
     evtSource.onopen = () => {
-        document.getElementById("connectionStatus").style.setProperty("background-color","#00a30e")
+        document.getElementById("connectionStatus").style.setProperty("background-color", "#00a30e")
     };
-    function infoHandler(expand) {
-        if (expand) {
-            document.getElementById("collapsed-information").style.display = "none";
-            document.getElementById("information").style.display = "block";
-        } else {
-            document.getElementById("collapsed-information").style.display = "block";
-            document.getElementById("information").style.display = "none";
-        }
+
+    function infoHandler() {
+        document.getElementById("information").classList.toggle("active");
+        window.scrollTo({top: 0})
     }
 </script>
 </html>
