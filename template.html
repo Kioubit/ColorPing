@@ -103,13 +103,9 @@
 </body>
 <script>
     const canvas = document.getElementById("display");
-    const ctx = canvas.getContext("2d")
-    ctx.imageSmoothingEnabled = false;
-    ctx.mozImageSmoothingEnabled = false;
-    ctx.webkitImageSmoothingEnabled = false;
-
     canvas.width = 1024;
     canvas.height = 1024;
+    const ctx = canvas.getContext("2d")
 
     async function resizeCanvas() {
         let desiredSize = document.documentElement.clientWidth - 20;
@@ -118,6 +114,11 @@
         }
         canvas.style.width = desiredSize.toString() + "px";
         canvas.style.height = desiredSize.toString() + "px";
+
+        // These properties get reset on resize
+        ctx.imageSmoothingEnabled = false;
+        ctx.mozImageSmoothingEnabled = false;
+        ctx.webkitImageSmoothingEnabled = false;
     }
 
     window.onresize = resizeCanvas;

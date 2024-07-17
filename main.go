@@ -9,24 +9,32 @@ import (
 	"image"
 	"image/color"
 	"image/png"
-	"log"
+	"os"
+	"runtime"
 	"sync"
 )
 
 const interfaceName = "canvas"
-const handlerCount = 4
 
 func main() {
 	prePopulatePixelArray()
 	packetChan := make(chan *[]byte, 1000)
-	for i := 0; i < handlerCount; i++ {
+	for i := 0; i < runtime.NumCPU(); i++ {
 		go packetHandler(packetChan)
 	}
-	go startInterface(packetChan)
-	go streamServer()
+	go func() {
+		err := startInterface(packetChan)
+		if err != nil {
+			fmt.Println("Interface handler error:", err)
+			os.Exit(0)
+		}
+	}()
 	fmt.Println("Kioubit ColorPing started")
 	fmt.Println("Interface name:", interfaceName, "HTTP server port: 9090")
-	httpServer()
+	if err := httpServer(); err != nil {
+		fmt.Println("Error starting HTTP server:", err)
+		return
+	}
 }
 
 func prePopulatePixelArray() {
@@ -45,21 +53,21 @@ var pktPool = sync.Pool{
 	New: func() interface{} { return make([]byte, 2000) },
 }
 
-func startInterface(packetChan chan *[]byte) {
+func startInterface(packetChan chan *[]byte) error {
 	config := water.Config{
 		DeviceType: water.TUN,
 	}
 	config.Name = interfaceName
 	iFace, err := water.New(config)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 
 	for {
 		packet := pktPool.Get().([]byte)
 		n, err := iFace.Read(packet)
 		if err != nil {
-			log.Fatal(err)
+			return err
 		}
 		packet = packet[:n]
 		packetChan <- &packet
@@ -167,7 +175,7 @@ func getPicture(fullUpdate bool, incrementalUpdate bool) (string, string) {
 		buff := new(bytes.Buffer)
 		err := encoder.Encode(buff, canvasIncrementalUpdate)
 		if err != nil {
-			log.Println(err.Error())
+			fmt.Println("PNG encoding error:", err)
 		}
 		incrementalUpdateResult = "event: u\ndata:" + base64.StdEncoding.EncodeToString(buff.Bytes()) + "\n\n"
 	}
@@ -177,7 +185,7 @@ func getPicture(fullUpdate bool, incrementalUpdate bool) (string, string) {
 		buff := new(bytes.Buffer)
 		err := encoder.Encode(buff, canvasFullUpdate)
 		if err != nil {
-			log.Println(err.Error())
+			fmt.Println("PNG encoding error:", err)
 		}
 		fullUpdateResult = "event: u\ndata:" + base64.StdEncoding.EncodeToString(buff.Bytes()) + "\n\n"
 	}
