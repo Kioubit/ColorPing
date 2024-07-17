@@ -174,7 +174,6 @@ func stream(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Streaming unsupported!", http.StatusInternalServerError)
 		return
 	}
-	streamServer()
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
@@ -186,8 +185,9 @@ func stream(w http.ResponseWriter, r *http.Request) {
 	clientMutex.Lock()
 	clients = append(clients, newClient)
 	clientMutex.Unlock()
+	streamServer()
 
-	// For when clients are removed prior to connection closed, to avoid a call to delete(clients, id)
+	// For when clients are removed prior to connection close, to avoid a call to deleteClient()
 	var channelClosedFirst = false
 	go func() {
 		// Listen for connection close
