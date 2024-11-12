@@ -111,7 +111,7 @@ func packetHandler(packetChan chan *[]byte) {
 			obj.changed = true
 		}
 		obj.Unlock()
-		pktPool.Put(*packet)
+		pktPool.Put(packet)
 	}
 
 }
