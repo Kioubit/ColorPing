@@ -26,6 +26,10 @@ Where:
 - ``????`` can be anything
 - ``XXXX`` must be the target X coordinate of the canvas, encoded as hexadecimal
 - ``YYYY`` must be the target Y coordinate of the canvas, encoded as hexadecimal
-- ``RR`` target "red" value (0-255), encoded as hexadecimal
-- ``GG`` target "green" value (0-255), encoded as hexadecimal
-- ``BB`` target "blue" value (0-255), encoded as hexadecimal
+- ``RR`` target "red" value (0–255), encoded as hexadecimal
+- ``GG`` target "green" value (0–255), encoded as hexadecimal
+- ``BB`` target "blue" value (0–255), encoded as hexadecimal
+
+### Experimental io_uring option
+For Linux kernel versions >= 5.1, an experimental option was added to use io_uring to improve performance.
+To use this option, add the `-io-uring` commandline flag.
