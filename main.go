@@ -4,7 +4,10 @@ import (
 	"bytes"
 	"encoding/base64"
 	"encoding/binary"
+	"errors"
+	"flag"
 	"fmt"
+	"github.com/godzie44/go-uring/uring"
 	"github.com/songgao/water"
 	"image"
 	"image/color"
@@ -12,18 +15,27 @@ import (
 	"os"
 	"runtime"
 	"sync"
+	"syscall"
 )
 
 const interfaceName = "canvas"
 
 func main() {
+	useIoUring := flag.Bool("io-uring", false, "use io_uring  (experimental)")
+	flag.Parse()
+
 	prePopulatePixelArray()
 	packetChan := make(chan *[]byte, 1000)
 	for i := 0; i < runtime.NumCPU(); i++ {
 		go packetHandler(packetChan)
 	}
 	go func() {
-		err := startInterface(packetChan)
+		var err error
+		if *useIoUring {
+			err = startInterfaceIoUring(packetChan)
+		} else {
+			err = startInterface(packetChan)
+		}
 		if err != nil {
 			fmt.Println("Interface handler error:", err)
 			os.Exit(0)
@@ -50,10 +62,10 @@ func prePopulatePixelArray() {
 }
 
 var pktPool = sync.Pool{
-	New: func() interface{} { return make([]byte, 2000) },
+	New: func() interface{} { return make([]byte, 2048) },
 }
 
-func startInterface(packetChan chan *[]byte) error {
+func startInterface(packetChan chan<- *[]byte) error {
 	config := water.Config{
 		DeviceType: water.TUN,
 	}
@@ -71,6 +83,113 @@ func startInterface(packetChan chan *[]byte) error {
 		}
 		packet = packet[:n]
 		packetChan <- &packet
+	}
+}
+
+func startInterfaceIoUring(packetChan chan<- *[]byte) error {
+	config := water.Config{DeviceType: water.TUN}
+	config.Name = interfaceName
+	iFace, err := water.New(config)
+	if err != nil {
+		return err
+	}
+	fd := iFace.ReadWriteCloser.(*os.File).Fd()
+	defer func(iFace *water.Interface) {
+		_ = iFace.Close()
+	}(iFace)
+
+	ring, err := uring.New(256)
+	if err != nil {
+		return err
+	}
+	defer func(ring *uring.Ring) {
+		_ = ring.Close()
+	}(ring)
+
+	// Submit initial batch of read requests
+	const (
+		batchSize       = 128
+		submitThreshold = batchSize / 2
+	)
+	packets := make([][]byte, batchSize)
+
+	for i := 0; i < batchSize; i++ {
+		packets[i] = pktPool.Get().([]byte)
+		err = ring.QueueSQE(uring.Read(fd, packets[i], 0), 0, uint64(i))
+		if err != nil {
+			return err
+		}
+	}
+
+	_, err = ring.Submit()
+	if err != nil {
+		return err
+	}
+
+	pendingSubmits := 0
+	for {
+		cqe, err := ring.WaitCQEvents(1)
+		if err != nil {
+			if errors.Is(err, syscall.EINTR) {
+				continue
+			}
+			return err
+		}
+
+		for cqe != nil {
+			packetIdx := cqe.UserData
+
+			if cqe.Error() != nil {
+				ring.SeenCQE(cqe)
+				if !errors.Is(cqe.Error(), syscall.EAGAIN) {
+					return cqe.Error()
+				}
+				// Resubmit on EAGAIN
+				err = ring.QueueSQE(uring.Read(fd, packets[packetIdx], 0), 0, packetIdx)
+				if err != nil {
+					return err
+				}
+				pendingSubmits++
+			} else {
+				// Process successful read
+				readBytes := cqe.Res
+				pb := packets[packetIdx]
+
+				packetData := pb[:readBytes]
+				packetChan <- &packetData
+
+				packets[packetIdx] = pktPool.Get().([]byte)
+
+				ring.SeenCQE(cqe)
+
+				err = ring.QueueSQE(uring.Read(fd, packets[packetIdx], 0), 0, packetIdx)
+				if err != nil {
+					return err
+				}
+				pendingSubmits++
+			}
+
+			if pendingSubmits >= submitThreshold {
+				break
+			}
+
+			// Check for more available completions without blocking
+			cqe, err = ring.PeekCQE()
+			if err != nil {
+				if !errors.Is(err, syscall.EAGAIN) {
+					return cqe.Error()
+				}
+				break
+			}
+		}
+		if pendingSubmits >= submitThreshold {
+			_, err = ring.Submit()
+			if err != nil {
+				return err
+			}
+			pendingSubmits = 0
+		}
+
 	}
 }
 
@@ -111,7 +230,8 @@ func packetHandler(packetChan chan *[]byte) {
 			obj.changed = true
 		}
 		obj.Unlock()
-		pktPool.Put(packet)
+		*packet = (*packet)[:cap(*packet)]
+		pktPool.Put(*packet)
 	}
 
 }
